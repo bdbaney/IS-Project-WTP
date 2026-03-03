@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<!--
+  Willow Tree Properties — Employee Time Entry (employee.html)
+  ============================================================
+  HOW TO USE:
+    • Open this file in any mobile or desktop browser.
+    • Fill in your name (remembered after first use), select date/job/pay, enter hours, and tap Submit.
+    • Submitted entries appear in "Today's Entries" below the form.
+    • To delete an entry, tap the × button on its card.
+    • Data is saved to localStorage and visible in manager.html.
+
+  QUICK DEMO:
+    • Sample data is pre-loaded on first visit.
+    • To reset all data, open the browser console and run:  WTPData.resetData();
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WTP Time Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Employee-specific micro-styles */
+    .hours-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+    .entry-meta  { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+    .entry-hours { font-size: 1.35rem; font-weight: 700; color: var(--wtp-green); line-height: 1; }
+    .entry-job   { font-size: 0.9rem;  font-weight: 600; color: var(--text); }
+    .delete-btn  {
+      position: absolute; top: 0.7rem; right: 0.8rem;
+      width: 1.6rem; height: 1.6rem;
+      background: #fee2e2; color: #b91c1c;
+      border: none; border-radius: 50%;
+      font-size: 0.95rem; line-height: 1; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.12s;
+    }
+    .delete-btn:hover { background: #fecaca; }
+    .empty-state { text-align: center; padding: 2rem 1rem; color: var(--muted); }
+    .empty-state svg { margin: 0 auto 0.75rem; display: block; opacity: 0.35; }
+    .day-total { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+    .day-total strong { color: var(--wtp-green); font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="site-header">
+  <div style="display:flex;align-items:center;gap:0.65rem;">
+    <span class="logo-mark">🌿</span>
+    <div>
+      <div class="logo-text">Willow Tree Properties</div>
+      <div class="logo-sub">Employee Time Tracker</div>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<main class="emp-layout">
+
+  <!-- Form Card -->
+  <div class="card" style="margin-bottom:1.5rem;">
+    <h2 style="font-size:1.1rem;font-weight:700;margin:0 0 1.1rem;color:var(--text);">Log Time Entry</h2>
+
+    <form id="time-form" novalidate>
+
+      <!-- Employee Name -->
+      <div style="margin-bottom:1rem;">
+        <label class="form-label" for="emp-name">Employee Name</label>
+        <input
+          id="emp-name"
+          type="text"
+          class="wtp-input"
+          placeholder="Your full name"
+          autocomplete="name"
+          required
+        >
+      </div>
+
+      <!-- Date -->
+      <div style="margin-bottom:1rem;">
+        <label class="form-label" for="entry-date">Date</label>
+        <input
+          id="entry-date"
+          type="date"
+          class="wtp-input"
+          required
+        >
+      </div>
+
+      <!-- Job Name -->
+      <div style="margin-bottom:1rem;">
+        <label class="form-label" for="job-name">Job Name</label>
+        <select id="job-name" class="wtp-select" required>
+          <option value="" disabled selected>Select a job…</option>
+          <option>Property Maintenance</option>
+          <option>Landscaping</option>
+          <option>Renovation Project A</option>
+          <option>Office Work</option>
+        </select>
+      </div>
+
+      <!-- Job Description / Activity -->
+      <div style="margin-bottom:1rem;">
+        <label class="form-label" for="job-desc">Activity</label>
+        <select id="job-desc" class="wtp-select" required>
+          <option value="" disabled selected>Select an activity…</option>
+          <option>General Labor</option>
+          <option>Equipment Operation</option>
+          <option>Skilled Trade</option>
+          <option>Administrative</option>
+          <option>Travel</option>
+        </select>
+      </div>
+
+      <!-- Pay Type -->
+      <div style="margin-bottom:1rem;">
+        <label class="form-label" for="pay-type">Pay Type</label>
+        <select id="pay-type" class="wtp-select" required>
+          <option value="" disabled selected>Select pay type…</option>
+          <option>Regular</option>
+          <option>Overtime</option>
+          <option>Double Time</option>
+          <option>Holiday</option>
+        </select>
+      </div>
+
+      <!-- Hours -->
+      <div style="margin-bottom:1.5rem;">
+        <label class="form-label" for="hours">Hours Worked</label>
+        <input
+          id="hours"
+          type="number"
+          class="wtp-input"
+          placeholder="0.00"
+          min="0.25"
+          max="24"
+          step="0.25"
+          required
+        >
+        <p class="hours-hint">Enter in 0.25 increments (e.g. 7.5 = 7 hrs 30 min)</p>
+      </div>
+
+      <!-- Error Message -->
+      <p id="form-error" style="display:none;color:#b91c1c;font-size:0.875rem;margin-bottom:0.75rem;font-weight:500;"></p>
+
+      <!-- Submit -->
+      <button type="submit" class="btn-primary" id="submit-btn">Submit Entry</button>
+
+    </form>
+  </div>
+
+  <!-- Today's Entries -->
+  <div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+      <h2 style="font-size:1rem;font-weight:700;color:var(--text);margin:0;">Today's Entries</h2>
+      <span id="day-total" class="day-total"></span>
+    </div>
+    <div id="entries-list"></div>
+  </div>
+
+</main>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────── -->
+<script src="data.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── DOM refs ──
+  const form       = document.getElementById('time-form');
+  const empInput   = document.getElementById('emp-name');
+  const dateInput  = document.getElementById('entry-date');
+  const jobName    = document.getElementById('job-name');
+  const jobDesc    = document.getElementById('job-desc');
+  const payType    = document.getElementById('pay-type');
+  const hoursInput = document.getElementById('hours');
+  const submitBtn  = document.getElementById('submit-btn');
+  const errorEl    = document.getElementById('form-error');
+  const listEl     = document.getElementById('entries-list');
+  const dayTotalEl = document.getElementById('day-total');
+  const toastEl    = document.getElementById('toast');
+
+  // ── Initialize defaults ──
+  dateInput.value = new Date().toISOString().split('T')[0];
+  const savedName = localStorage.getItem('wtp_emp_name');
+  if (savedName) empInput.value = savedName;
+
+  // ── Toast helper ──
+  let toastTimer;
+  function showToast(msg, isError = false) {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast' + (isError ? ' error' : '');
+    // Force reflow so transition plays even if already shown
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3000);
+  }
+
+  // ── Error helper ──
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+  function clearError() {
+    errorEl.style.display = 'none';
+  }
+
+  // ── Pay type badge ──
+  function badgeClass(pt) {
+    const map = { 'Regular': 'Regular', 'Overtime': 'Overtime', 'Double Time': 'DoubleTtime', 'Holiday': 'Holiday' };
+    return 'badge badge-' + (map[pt] || 'Regular');
+  }
+
+  // ── Render today's entries ──
+  function renderEntries() {
+    const entries = WTPData.getToday().slice().reverse(); // newest first
+    const totalHours = entries.reduce((s, e) => s + e.hours, 0);
+
+    if (entries.length === 0) {
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p style="font-size:0.95rem;font-weight:500;">No entries logged today</p>
+          <p style="font-size:0.82rem;margin-top:0.25rem;">Fill out the form above to get started.</p>
+        </div>`;
+      dayTotalEl.innerHTML = '';
+      return;
+    }
+
+    dayTotalEl.innerHTML = `Today: <strong>${totalHours} hrs</strong>`;
+
+    listEl.innerHTML = entries.map(e => `
+      <div class="entry-card" style="margin-bottom:0.75rem;" data-id="${e.id}">
+        <button class="delete-btn" onclick="deleteEntry('${e.id}')" title="Delete entry" aria-label="Delete entry">×</button>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-right:1.8rem;">
+          <div>
+            <div class="entry-job">${escHtml(e.jobName)}</div>
+            <div class="entry-meta">${escHtml(e.jobDescription)} &bull; ${escHtml(e.date)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;padding-left:0.75rem;">
+            <div class="entry-hours">${e.hours}</div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:0.1rem;">hrs</div>
+          </div>
+        </div>
+        <div style="margin-top:0.5rem;">
+          <span class="${badgeClass(e.payType)}">${escHtml(e.payType)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── HTML escape ──
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Delete entry ──
+  window.deleteEntry = function (id) {
+    if (!confirm('Remove this entry?')) return;
+    WTPData.remove(id);
+    renderEntries();
+    showToast('Entry removed.');
+  };
+
+  // ── Form submission ──
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearError();
+
+    const name  = empInput.value.trim();
+    const date  = dateInput.value;
+    const jName = jobName.value;
+    const jDesc = jobDesc.value;
+    const pType = payType.value;
+    const hrs   = parseFloat(hoursInput.value);
+
+    // Validation
+    if (!name)             return showError('Please enter your name.');
+    if (!date)             return showError('Please select a date.');
+    if (!jName)            return showError('Please select a job.');
+    if (!jDesc)            return showError('Please select an activity.');
+    if (!pType)            return showError('Please select a pay type.');
+    if (isNaN(hrs) || hrs < 0.25) return showError('Please enter at least 0.25 hours.');
+    if (hrs > 24)          return showError('Hours cannot exceed 24 per entry.');
+    if (hrs % 0.25 !== 0)  return showError('Hours must be in 0.25 increments (e.g. 7, 7.25, 7.5, 7.75).');
+
+    // Persist employee name
+    localStorage.setItem('wtp_emp_name', name);
+
+    // Save
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving…';
+
+    setTimeout(() => {
+      WTPData.add({
+        employeeName:   name,
+        date:           date,
+        jobName:        jName,
+        jobDescription: jDesc,
+        payType:        pType,
+        hours:          hrs,
+      });
+
+      // Reset form (keep name + date)
+      jobName.value    = '';
+      jobDesc.value    = '';
+      payType.value    = '';
+      hoursInput.value = '';
+
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Submit Entry';
+
+      renderEntries();
+      showToast('Entry saved! ✓');
+    }, 200); // brief delay for perceived responsiveness
+  });
+
+  // ── Initial render ──
+  renderEntries();
+
+})();
+</script>
+</body>
+</html>
