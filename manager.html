@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<!--
+  Willow Tree Properties — Manager Dashboard (manager.html)
+  ==========================================================
+  HOW TO USE:
+    • Open this file in a desktop browser alongside employee.html.
+    • Both files share the same localStorage data ("wtp_timesheets").
+    • Use the filter bar to narrow results by date range or employee name.
+    • Click any column header to sort the table.
+    • Click Edit (blue) to modify an entry in a modal form.
+    • Click Delete (red) to remove an entry after confirmation.
+    • Click "Export CSV" to download the currently filtered data.
+    • Analytics at the top always reflect the current Mon–Sun week.
+
+  RESETTING SAMPLE DATA:
+    Open the browser console and run:  WTPData.resetData();  then refresh.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WTP Manager Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Manager-specific micro-styles */
+    .stat-label  { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.35rem; }
+    .stat-value  { font-size: 1.75rem; font-weight: 800; color: var(--text); line-height: 1; }
+    .stat-sub    { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+    .section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .count-badge { font-size: 0.75rem; background: #e2ebe5; color: var(--wtp-green); padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700; }
+    .no-results  { text-align: center; padding: 2.5rem; color: var(--muted); font-size: 0.9rem; }
+    .export-btn  {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.55rem 1.1rem;
+      background: var(--wtp-green);
+      color: #fff;
+      border: none; border-radius: 0.45rem;
+      font-size: 0.875rem; font-weight: 600; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .export-btn:hover { background: var(--wtp-green-dark); }
+    .modal-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+    .modal-row   { margin-bottom: 0.9rem; }
+    .modal-title { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.2rem; }
+    .modal-actions { display: flex; gap: 0.65rem; margin-top: 1.25rem; justify-content: flex-end; }
+    .btn-save    { padding: 0.6rem 1.4rem; background: var(--wtp-green); color: #fff; border: none; border-radius: 0.45rem; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .btn-save:hover { background: var(--wtp-green-dark); }
+    .btn-cancel  { padding: 0.6rem 1.1rem; background: #f3f4f6; border: none; border-radius: 0.45rem; font-weight: 500; cursor: pointer; font-size: 0.9rem; }
+    .btn-cancel:hover { background: #e5e7eb; }
+    .btn-del-confirm { padding: 0.6rem 1.2rem; background: #dc2626; color: #fff; border: none; border-radius: 0.45rem; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .btn-del-confirm:hover { background: #b91c1c; }
+    .del-preview { background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 0.75rem 1rem; font-size: 0.875rem; margin: 0.75rem 0; }
+    .del-preview strong { color: var(--text); }
+    .grid-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    @media (max-width: 700px) { .grid-stats { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 440px) { .grid-stats { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="site-header">
+  <div style="display:flex;justify-content:space-between;align-items:center;max-width:1280px;margin:0 auto;">
+    <div style="display:flex;align-items:center;gap:0.65rem;">
+      <span class="logo-mark">🌿</span>
+      <div>
+        <div class="logo-text">Willow Tree Properties</div>
+        <div class="logo-sub">Manager Dashboard</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <a href="employee.html" style="font-size:0.8rem;color:rgba(255,255,255,0.8);text-decoration:none;padding:0.4rem 0.8rem;border:1px solid rgba(255,255,255,0.3);border-radius:0.4rem;transition:background 0.12s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">Employee View →</a>
+      <button class="export-btn" id="export-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<main class="mgr-layout">
+
+  <!-- ── Analytics ── -->
+  <div style="margin-bottom:2rem;">
+    <p class="section-title">This Week's Overview</p>
+    <div class="grid-stats">
+      <div class="stat-card">
+        <div class="stat-label">Total Hours</div>
+        <div class="stat-value" id="stat-hours">—</div>
+        <div class="stat-sub">Mon – Sun</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Est. Labor Cost</div>
+        <div class="stat-value" id="stat-cost">—</div>
+        <div class="stat-sub">Based on pay rates</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-label">Entries Logged</div>
+        <div class="stat-value" id="stat-entries">—</div>
+        <div class="stat-sub">All time</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Job Breakdown Chart ── -->
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="section-hdr">
+      <p class="section-title" style="margin:0;">Hours by Job (All Time)</p>
+    </div>
+    <div id="job-chart">
+      <p style="color:var(--muted);font-size:0.875rem;">Loading chart…</p>
+    </div>
+  </div>
+
+  <!-- ── Timesheets Table ── -->
+  <div>
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label class="filter-label" for="f-start">From Date</label>
+        <input type="date" id="f-start" class="filter-input">
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="f-end">To Date</label>
+        <input type="date" id="f-end" class="filter-input">
+      </div>
+      <div class="filter-group" style="flex:2;min-width:180px;">
+        <label class="filter-label" for="f-emp">Employee Name</label>
+        <input type="text" id="f-emp" class="filter-input" placeholder="Search by name…">
+      </div>
+      <div class="filter-actions">
+        <button class="btn-secondary" id="filter-btn">Apply</button>
+        <button class="btn-secondary" id="clear-btn">Clear</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div style="background:white;border-radius:0 0 0.85rem 0.85rem;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
+        <span class="section-title" style="margin:0;">Timesheet Entries</span>
+        <span id="row-count" class="count-badge">0 entries</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="wtp-table" id="data-table">
+          <thead>
+            <tr>
+              <th data-col="employeeName">Employee <i class="sort-icon">↕</i></th>
+              <th data-col="date">Date <i class="sort-icon">↕</i></th>
+              <th data-col="jobName">Job Name <i class="sort-icon">↕</i></th>
+              <th data-col="jobDescription">Activity <i class="sort-icon">↕</i></th>
+              <th data-col="payType">Pay Type <i class="sort-icon">↕</i></th>
+              <th data-col="hours">Hours <i class="sort-icon">↕</i></th>
+              <th style="cursor:default;">Est. Cost</th>
+              <th style="cursor:default;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="8" class="no-results">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Edit Modal ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="modal-box">
+    <h2 class="modal-title" id="edit-title">Edit Time Entry</h2>
+    <form id="edit-form" novalidate>
+      <input type="hidden" id="edit-id">
+
+      <div class="modal-row">
+        <label class="modal-label" for="edit-emp">Employee Name</label>
+        <input type="text" id="edit-emp" class="wtp-input" required>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label" for="edit-date">Date</label>
+        <input type="date" id="edit-date" class="wtp-input" required>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label" for="edit-job">Job Name</label>
+        <select id="edit-job" class="wtp-select" required>
+          <option value="" disabled>Select a job…</option>
+          <option>Property Maintenance</option>
+          <option>Landscaping</option>
+          <option>Renovation Project A</option>
+          <option>Office Work</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label" for="edit-desc">Activity</label>
+        <select id="edit-desc" class="wtp-select" required>
+          <option value="" disabled>Select an activity…</option>
+          <option>General Labor</option>
+          <option>Equipment Operation</option>
+          <option>Skilled Trade</option>
+          <option>Administrative</option>
+          <option>Travel</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label" for="edit-pay">Pay Type</label>
+        <select id="edit-pay" class="wtp-select" required>
+          <option value="" disabled>Select pay type…</option>
+          <option>Regular</option>
+          <option>Overtime</option>
+          <option>Double Time</option>
+          <option>Holiday</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label" for="edit-hours">Hours</label>
+        <input type="number" id="edit-hours" class="wtp-input" min="0.25" max="24" step="0.25" required>
+      </div>
+
+      <p id="edit-error" style="display:none;color:#b91c1c;font-size:0.85rem;margin-bottom:0.5rem;"></p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="edit-cancel">Cancel</button>
+        <button type="submit" class="btn-save">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Delete Confirmation Modal ──────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="delete-modal" role="dialog" aria-modal="true">
+  <div class="modal-box" style="max-width:420px;">
+    <h2 class="modal-title" style="color:#b91c1c;">Delete Entry?</h2>
+    <p style="font-size:0.9rem;color:var(--muted);">This action cannot be undone.</p>
+    <div class="del-preview" id="del-preview"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="del-cancel">Cancel</button>
+      <button type="button" class="btn-del-confirm" id="del-confirm">Delete Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────── -->
+<script src="data.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── State ──
+  let currentEntries   = [];
+  let pendingDeleteId  = null;
+  let sortCol          = 'date';
+  let sortDir          = 'desc';     // 'asc' | 'desc'
+
+  // ── DOM refs ──
+  const tableBody  = document.getElementById('table-body');
+  const rowCount   = document.getElementById('row-count');
+  const fStart     = document.getElementById('f-start');
+  const fEnd       = document.getElementById('f-end');
+  const fEmp       = document.getElementById('f-emp');
+  const filterBtn  = document.getElementById('filter-btn');
+  const clearBtn   = document.getElementById('clear-btn');
+  const exportBtn  = document.getElementById('export-btn');
+  const toastEl    = document.getElementById('toast');
+
+  const editModal  = document.getElementById('edit-modal');
+  const editForm   = document.getElementById('edit-form');
+  const editId     = document.getElementById('edit-id');
+  const editEmp    = document.getElementById('edit-emp');
+  const editDate   = document.getElementById('edit-date');
+  const editJob    = document.getElementById('edit-job');
+  const editDesc   = document.getElementById('edit-desc');
+  const editPay    = document.getElementById('edit-pay');
+  const editHours  = document.getElementById('edit-hours');
+  const editError  = document.getElementById('edit-error');
+
+  const deleteModal = document.getElementById('delete-modal');
+  const delPreview  = document.getElementById('del-preview');
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg, isError = false) {
+    toastEl.textContent = msg;
+    toastEl.className   = 'toast' + (isError ? ' error' : '');
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3200);
+  }
+
+  // ── Escape HTML ──
+  function esc(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Badge ──
+  function badge(pt) {
+    const map = { 'Regular':'Regular','Overtime':'Overtime','Double Time':'DoubleTtime','Holiday':'Holiday' };
+    return `<span class="badge badge-${map[pt]||'Regular'}">${esc(pt)}</span>`;
+  }
+
+  // ── Format currency ──
+  function fmtCost(n) {
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // ── Sort ──
+  function sortEntries(arr) {
+    return arr.slice().sort((a, b) => {
+      let va = a[sortCol], vb = b[sortCol];
+      if (sortCol === 'hours') { va = +va; vb = +vb; }
+      else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // ── Render table ──
+  function renderTable() {
+    const sorted = sortEntries(currentEntries);
+
+    // Update sort icons
+    document.querySelectorAll('.wtp-table thead th[data-col]').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      const icon = th.querySelector('.sort-icon');
+      if (th.dataset.col === sortCol) {
+        th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        if (icon) icon.textContent = sortDir === 'asc' ? '↑' : '↓';
+      } else {
+        if (icon) icon.textContent = '↕';
+      }
+    });
+
+    rowCount.textContent = sorted.length + (sorted.length === 1 ? ' entry' : ' entries');
+
+    if (sorted.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="8" class="no-results">No entries match your filters.</td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = sorted.map(e => {
+      const cost = WTPData.entryCost(e);
+      return `
+        <tr>
+          <td style="font-weight:500;">${esc(e.employeeName)}</td>
+          <td>${esc(e.date)}</td>
+          <td>${esc(e.jobName)}</td>
+          <td style="color:var(--muted);">${esc(e.jobDescription)}</td>
+          <td>${badge(e.payType)}</td>
+          <td style="font-weight:600;">${e.hours}</td>
+          <td style="color:var(--muted);">${fmtCost(cost)}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn-icon btn-edit"   onclick="openEdit('${esc(e.id)}')">Edit</button>
+            <button class="btn-icon btn-delete" onclick="openDelete('${esc(e.id)}')">Delete</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  // ── Analytics ──
+  function renderAnalytics() {
+    const { weekHours, weekCost, totalEntries, byJob } = WTPData.getAnalytics();
+
+    document.getElementById('stat-hours').textContent   = weekHours % 1 === 0 ? weekHours : weekHours.toFixed(1);
+    document.getElementById('stat-cost').textContent    = fmtCost(weekCost);
+    document.getElementById('stat-entries').textContent = totalEntries;
+
+    // Bar chart
+    const jobChart = document.getElementById('job-chart');
+    const jobs = Object.entries(byJob).sort((a, b) => b[1].hours - a[1].hours);
+    const maxHours = jobs.length ? jobs[0][1].hours : 1;
+
+    if (jobs.length === 0) {
+      jobChart.innerHTML = '<p style="color:var(--muted);font-size:0.875rem;">No data available.</p>';
+      return;
+    }
+
+    jobChart.innerHTML = jobs.map(([name, data]) => {
+      const pct = Math.round((data.hours / maxHours) * 100);
+      return `
+        <div class="bar-row">
+          <span class="bar-label" title="${esc(name)}">${esc(name)}</span>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-value">${data.hours % 1 === 0 ? data.hours : data.hours.toFixed(1)} hrs</span>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Load / filter data ──
+  function loadData() {
+    currentEntries = WTPData.filterEntries({
+      startDate: fStart.value || undefined,
+      endDate:   fEnd.value   || undefined,
+      employee:  fEmp.value.trim() || undefined,
+    });
+    renderTable();
+  }
+
+  // ── Column sort ──
+  document.querySelectorAll('.wtp-table thead th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortCol = col;
+        sortDir = 'asc';
+      }
+      renderTable();
+    });
+  });
+
+  // ── Filters ──
+  filterBtn.addEventListener('click', loadData);
+  clearBtn.addEventListener('click', () => {
+    fStart.value = ''; fEnd.value = ''; fEmp.value = '';
+    loadData();
+  });
+
+  // Allow enter key in text filter
+  fEmp.addEventListener('keydown', e => { if (e.key === 'Enter') loadData(); });
+
+  // ── Export ──
+  exportBtn.addEventListener('click', () => {
+    if (currentEntries.length === 0) { showToast('No entries to export.', true); return; }
+    WTPData.exportToCSV(sortEntries(currentEntries));
+    showToast('CSV downloaded!');
+  });
+
+  // ── Edit Modal ──
+  window.openEdit = function (id) {
+    const entry = WTPData.getAll().find(e => e.id === id);
+    if (!entry) return;
+
+    editId.value    = entry.id;
+    editEmp.value   = entry.employeeName;
+    editDate.value  = entry.date;
+    editJob.value   = entry.jobName;
+    editDesc.value  = entry.jobDescription;
+    editPay.value   = entry.payType;
+    editHours.value = entry.hours;
+    editError.style.display = 'none';
+
+    editModal.classList.remove('hidden');
+    editEmp.focus();
+  };
+
+  function closeEditModal() { editModal.classList.add('hidden'); }
+
+  document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+  editModal.addEventListener('click', e => { if (e.target === editModal) closeEditModal(); });
+
+  editForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    editError.style.display = 'none';
+
+    const hrs = parseFloat(editHours.value);
+    if (!editEmp.value.trim()) { editError.textContent = 'Employee name is required.'; editError.style.display='block'; return; }
+    if (isNaN(hrs) || hrs < 0.25 || hrs > 24) { editError.textContent = 'Hours must be between 0.25 and 24.'; editError.style.display='block'; return; }
+
+    WTPData.update(editId.value, {
+      employeeName:   editEmp.value.trim(),
+      date:           editDate.value,
+      jobName:        editJob.value,
+      jobDescription: editDesc.value,
+      payType:        editPay.value,
+      hours:          hrs,
+    });
+
+    closeEditModal();
+    loadData();
+    renderAnalytics();
+    showToast('Entry updated.');
+  });
+
+  // ── Delete Modal ──
+  window.openDelete = function (id) {
+    const entry = WTPData.getAll().find(e => e.id === id);
+    if (!entry) return;
+    pendingDeleteId = id;
+    delPreview.innerHTML = `
+      <strong>${esc(entry.employeeName)}</strong><br>
+      ${esc(entry.date)} &bull; ${esc(entry.jobName)}<br>
+      ${esc(entry.jobDescription)} &bull; ${esc(entry.payType)} &bull; ${entry.hours} hrs
+    `;
+    deleteModal.classList.remove('hidden');
+  };
+
+  function closeDeleteModal() { deleteModal.classList.add('hidden'); pendingDeleteId = null; }
+
+  document.getElementById('del-cancel').addEventListener('click', closeDeleteModal);
+  deleteModal.addEventListener('click', e => { if (e.target === deleteModal) closeDeleteModal(); });
+
+  document.getElementById('del-confirm').addEventListener('click', () => {
+    if (!pendingDeleteId) return;
+    WTPData.remove(pendingDeleteId);
+    closeDeleteModal();
+    loadData();
+    renderAnalytics();
+    showToast('Entry deleted.');
+  });
+
+  // ── Escape key closes modals ──
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeEditModal(); closeDeleteModal(); }
+  });
+
+  // ── Initial load ──
+  loadData();
+  renderAnalytics();
+
+})();
+</script>
+</body>
+</html>
